@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Mozilla UWA - Browser AI Agent",
+  "version": "1.0.0",
+  "description": "Browser-level AI agent based on Mozilla Web Agent API with MCP-style tool controller",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dist/content.js"],
+      "css": ["dist/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": [
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Mozilla UWA Agent"
+  },
+  "options_page": "options/options.html"
+}

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mozilla UWA Agent</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Mozilla UWA</h1>
+      <p class="subtitle">Browser AI Agent</p>
+    </header>
+
+    <div class="mode-tabs">
+      <button type="button" class="tab active" data-mode="ask">Ask</button>
+      <button type="button" class="tab" data-mode="execute">Plan & Execute</button>
+      <button type="button" class="tab" data-mode="global">Global Task</button>
+    </div>
+
+    <div id="ask-panel" class="panel">
+      <div class="input-group">
+        <textarea id="prompt" placeholder="Ask the agent anything... (e.g., 'What are my current preferences?')" rows="2"></textarea>
+        <button id="send" type="button">Send</button>
+      </div>
+    </div>
+
+    <div id="global-panel" class="panel hidden">
+      <div class="input-group">
+        <textarea id="global-prompt" placeholder="e.g., Can I afford this and am I free that day?" rows="2"></textarea>
+        <button id="global-send" type="button">Run Global Task</button>
+      </div>
+      <p class="hint">Extracts price from this tab, checks budget & calendar in background, then recommends.</p>
+      <div id="global-progress" class="progress hidden"></div>
+    </div>
+
+    <div id="execute-panel" class="panel hidden">
+      <div class="input-group">
+        <input type="text" id="goal" placeholder="e.g., Click Add to Cart, Fill search box with 'laptop'">
+        <button id="execute" type="button">Run on Page</button>
+      </div>
+      <p class="hint">Runs on the current tab. The agent will read the page and interact with elements.</p>
+    </div>
+
+    <div id="response" class="response hidden"></div>
+    <div id="recommendation" class="recommendation hidden"></div>
+    <div id="error" class="error hidden"></div>
+
+    <footer>
+      <a href="#" id="options-link">Settings</a>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
