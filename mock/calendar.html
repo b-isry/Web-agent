@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Calendar</title>
+  <style>
+    body { font-family: system-ui; padding: 24px; }
+    .event { padding: 8px; margin: 4px 0; background: #f1f5f9; border-radius: 6px; }
+    .date { font-weight: bold; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Calendar</h1>
+  <div id="calendar-data">
+    <div class="date" id="display-date">Loading...</div>
+    <div id="events">
+      <!-- Mock: Team standup 9am, Dentist 2pm on some days -->
+      <div class="event" data-title="Team Standup" data-start="09:00" data-end="09:30">Team Standup (9:00 - 9:30)</div>
+      <div class="event" data-title="Dentist Appointment" data-start="14:00" data-end="15:00">Dentist Appointment (2:00 - 3:00 PM)</div>
+    </div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const date = params.get('date') || new Date().toISOString().slice(0, 10);
+    document.getElementById('display-date').textContent = 'Date: ' + date;
+    // Simulate: only show dentist on Wednesdays
+    const d = new Date(date);
+    const isWed = d.getDay() === 3;
+    if (!isWed) {
+      document.querySelector('[data-title="Dentist Appointment"]').remove();
+    }
+  </script>
+</body>
+</html>
