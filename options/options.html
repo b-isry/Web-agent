@@ -17,6 +17,7 @@
         <select id="provider">
           <option value="openai">OpenAI (GPT)</option>
           <option value="anthropic">Anthropic (Claude)</option>
+          <option value="groq">Groq (Llama, Mixtral)</option>
         </select>
       </div>
 
@@ -28,7 +29,12 @@
 
       <div class="field">
         <label for="model">Model</label>
-        <input type="text" id="model" placeholder="gpt-4o-mini or claude-3-5-sonnet-20241022">
+        <select id="model">
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="gpt-4o-mini">gpt-4o-mini</option>
+          <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
+          <option value="llama-3-70b">llama-3-70b</option>
+        </select>
       </div>
     </section>
 
@@ -37,11 +43,14 @@
       <p>These preferences can be read by the agent via the "Read User Preferences" tool.</p>
       <div class="field">
         <label for="theme">Theme</label>
-        <select id="theme">
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
+        <div class="theme-row">
+          <select id="theme">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+          <button id="toggle-theme" type="button">Toggle Theme</button>
+        </div>
       </div>
       <div class="field">
         <label>
@@ -51,7 +60,17 @@
       </div>
       <div class="field">
         <label for="language">Language</label>
-        <input type="text" id="language" value="en" placeholder="en">
+        <select id="language">
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="monthly_budget">Monthly Budget ($)</label>
+        <input type="number" id="monthly_budget" min="0" step="0.01" placeholder="e.g. 2000">
+        <small>Used by the agent to check affordability. Stored locally.</small>
       </div>
     </section>
 
