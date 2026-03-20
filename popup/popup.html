@@ -32,7 +32,7 @@
         <button id="global-send" type="button">Run Global Task</button>
       </div>
       <p class="hint">Extracts price from this tab, checks budget & calendar in background, then recommends.</p>
-      <div id="global-progress" class="progress hidden"></div>
+      <div id="global-progress" class="progress hidden" aria-hidden="true"></div>
     </div>
 
     <div id="execute-panel" class="panel hidden">
@@ -41,6 +41,16 @@
         <button id="execute" type="button">Run on Page</button>
       </div>
       <p class="hint">Runs on the current tab. The agent will read the page and interact with elements.</p>
+    </div>
+
+    <div id="active-task" class="active-task hidden">
+      <div class="active-task-header">
+        <strong id="active-task-goal"></strong>
+        <span id="active-task-status" class="status-badge"></span>
+      </div>
+      <div id="active-task-logs" class="active-task-logs"></div>
+      <div id="active-task-result" class="active-task-result hidden"></div>
+      <button id="dismiss-task" type="button" class="dismiss-btn hidden">Dismiss</button>
     </div>
 
     <div id="response" class="response hidden"></div>

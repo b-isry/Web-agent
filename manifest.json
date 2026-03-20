@@ -7,7 +7,9 @@
     "storage",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "identity",
+    "sidePanel"
   ],
   "content_scripts": [
     {
@@ -20,15 +22,25 @@
   "host_permissions": [
     "https://api.openai.com/*",
     "https://api.anthropic.com/*",
+    "https://api.groq.com/*",
+    "https://www.googleapis.com/*",
     "<all_urls>"
   ],
+  "oauth2": {
+    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.events.readonly"
+    ]
+  },
   "background": {
     "service_worker": "background/service-worker.js",
     "type": "module"
   },
   "action": {
-    "default_popup": "popup/popup.html",
     "default_title": "Mozilla UWA Agent"
+  },
+  "side_panel": {
+    "default_path": "popup/popup.html"
   },
   "options_page": "options/options.html"
 }
