@@ -15,8 +15,20 @@ export class LLMClient {
    */
   async _getConfig() {
     return new Promise((resolve) => {
-      chrome.storage.local.get(['apiKey', 'provider', 'model'], resolve);
+      chrome.storage.local.get(['apiKey', 'provider', 'model', 'userPreferences'], resolve);
     });
+  }
+
+  /**
+   * Resolve model dropdown value to API model ID
+   */
+  _resolveModel(provider, model) {
+    const MODEL_MAP = {
+      anthropic: { 'claude-3-5-sonnet': 'claude-3-5-sonnet-20241022' },
+      groq: { 'llama-3-70b': 'llama-3.1-70b-versatile' },
+    };
+    const map = MODEL_MAP[provider];
+    return (map && map[model]) || model;
   }
 
   /**
@@ -31,7 +43,7 @@ export class LLMClient {
       return { error: 'API key not configured.' };
     }
     this.provider = config.provider || 'openai';
-    this.model = config.model || 'gpt-4o-mini';
+    this.model = this._resolveModel(this.provider, config.model || 'gpt-4o-mini');
 
     try {
       if (this.provider === 'openai') {
@@ -39,6 +51,9 @@ export class LLMClient {
       }
       if (this.provider === 'anthropic') {
         return await this._callAnthropicForPlan(config.apiKey, systemPrompt, userPrompt);
+      }
+      if (this.provider === 'groq') {
+        return await this._callGroqForPlan(config.apiKey, systemPrompt, userPrompt);
       }
       return { error: `Unknown provider: ${this.provider}` };
     } catch (err) {
@@ -64,6 +79,30 @@ export class LLMClient {
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error?.message || `OpenAI API error: ${response.status}`);
+    }
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content || '';
+    return { text };
+  }
+
+  async _callGroqForPlan(apiKey, systemPrompt, userPrompt) {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ]
+      })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Groq API error: ${response.status}`);
     }
     const data = await response.json();
     const text = data.choices?.[0]?.message?.content || '';
@@ -111,7 +150,7 @@ export class LLMClient {
     }
 
     this.provider = config.provider || 'openai';
-    this.model = config.model || 'gpt-4o-mini';
+    this.model = this._resolveModel(this.provider, config.model || 'gpt-4o-mini');
 
     const tools = this.toolController.listTools();
     const messages = [{ role: 'user', content: prompt }];
@@ -122,6 +161,9 @@ export class LLMClient {
       }
       if (this.provider === 'anthropic') {
         return await this._callAnthropic(config.apiKey, messages, tools);
+      }
+      if (this.provider === 'groq') {
+        return await this._callGroq(config.apiKey, messages, tools);
       }
       return { error: `Unknown provider: ${this.provider}` };
     } catch (err) {
@@ -187,6 +229,82 @@ export class LLMClient {
 
       // Get final response after tool execution
       const followUp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages
+        })
+      });
+
+      const followUpData = await followUp.json();
+      const followUpChoice = followUpData.choices?.[0];
+      return {
+        text: followUpChoice?.message?.content || JSON.stringify(toolResults)
+      };
+    }
+
+    return { text: choice.message?.content || '' };
+  }
+
+  /**
+   * Groq API call (OpenAI-compatible)
+   */
+  async _callGroq(apiKey, messages, tools) {
+    const openaiTools = tools.map((t) => ({
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.inputSchema
+      }
+    }));
+
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages,
+        tools: openaiTools.length ? openaiTools : undefined,
+        tool_choice: openaiTools.length ? 'auto' : undefined
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Groq API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const choice = data.choices?.[0];
+
+    if (!choice) {
+      throw new Error('No response from Groq');
+    }
+
+    if (choice.message?.tool_calls?.length) {
+      const toolResults = await this._executeToolCalls(choice.message.tool_calls);
+      messages.push(choice.message);
+      messages.push({
+        role: 'assistant',
+        content: null,
+        tool_calls: choice.message.tool_calls
+      });
+      const toolContent = toolResults[0]?.content ?? JSON.stringify(toolResults[0]);
+      messages.push({
+        role: 'tool',
+        tool_call_id: choice.message.tool_calls[0].id,
+        content: toolContent
+      });
+
+      const followUp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

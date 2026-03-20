@@ -176,6 +176,108 @@ function isActionLink(text) {
 }
 
 /**
+ * Show a permission request card with Shadow DOM isolation.
+ * @param {Object} action - The proposed action (e.g. { type: 'click', elementId: 'btn-0' })
+ * @param {string} reasoning - The AI's intent/explanation
+ * @param {string} [outcome] - Optional description of expected outcome
+ * @returns {Promise<{ confirmed: boolean }>} Resolves when user clicks Confirm or Cancel
+ */
+function showPermissionCard(action, reasoning, outcome) {
+  return new Promise((resolve) => {
+    const containerId = 'uwa-permission-card-container';
+    let container = document.getElementById(containerId);
+    if (container) container.remove();
+
+    container = document.createElement('div');
+    container.id = containerId;
+    container.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;pointer-events:none;';
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.3);pointer-events:auto;';
+    overlay.addEventListener('click', () => {
+      container.remove();
+      resolve({ confirmed: false });
+    });
+
+    const host = document.createElement('div');
+    host.style.cssText = 'position:relative;z-index:1;pointer-events:auto;';
+    container.appendChild(overlay);
+    container.appendChild(host);
+
+    const shadow = host.attachShadow({ mode: 'closed' });
+
+    const style = document.createElement('style');
+    style.textContent = `
+      .card {
+        width: min(420px, 90vw);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #1f2937;
+      }
+      .card-title { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.75rem; }
+      .reasoning-section { margin-bottom: 1rem; }
+      .reasoning-label { font-size: 0.75rem; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; }
+      .reasoning-text { font-size: 0.875rem; line-height: 1.5; color: #374151; }
+      .outcome { font-size: 0.8125rem; color: #6b7280; margin-bottom: 1rem; }
+      .actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
+      .btn {
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        font-size: 0.875rem; font-weight: 500;
+        cursor: pointer;
+        border: none;
+        transition: opacity 0.15s;
+      }
+      .btn:hover { opacity: 0.9; }
+      .btn-confirm { background: #2563eb; color: white; }
+      .btn-cancel { background: rgba(0, 0, 0, 0.08); color: #374151; }
+    `;
+
+    const actionLabel = action ? `${action.type || 'action'}${action.elementId ? ` on ${action.elementId}` : ''}` : 'Action';
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-title">${escapeHtml(actionLabel)}</div>
+      <div class="reasoning-section">
+        <div class="reasoning-label">Reasoning</div>
+        <div class="reasoning-text">${escapeHtml(reasoning || 'No reasoning provided.')}</div>
+      </div>
+      ${outcome ? `<div class="outcome">${escapeHtml(outcome)}</div>` : ''}
+      <div class="actions">
+        <button class="btn btn-cancel">Cancel</button>
+        <button class="btn btn-confirm">Confirm</button>
+      </div>
+    `;
+
+    shadow.appendChild(style);
+    shadow.appendChild(card);
+
+    card.querySelector('.btn-confirm').addEventListener('click', (e) => {
+      e.stopPropagation();
+      container.remove();
+      resolve({ confirmed: true });
+    });
+    card.querySelector('.btn-cancel').addEventListener('click', (e) => {
+      e.stopPropagation();
+      container.remove();
+      resolve({ confirmed: false });
+    });
+
+    document.body.appendChild(container);
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/**
  * Execute a DOM action (click, type, etc.)
  * @param {Object} action - { type: 'click'|'type', elementId: string, value?: string }
  * @returns {Object} Result of the action
