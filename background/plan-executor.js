@@ -3,6 +3,12 @@
  * LLM receives page context and decides which DOM elements to interact with
  */
 
+import {
+  startPlanExecuteSession,
+  appendPlanExecuteLog,
+  finishPlanExecuteSession,
+} from './session-state.js';
+
 export class PlanExecutor {
   constructor(llmClient) {
     this.llmClient = llmClient;
@@ -19,12 +25,17 @@ export class PlanExecutor {
     const history = [];
     let step = 0;
 
+    await startPlanExecuteSession(goal, tabId);
+    await appendPlanExecuteLog('Starting plan execution...');
+
     while (step < this.maxSteps) {
       step++;
+      await appendPlanExecuteLog(`Step ${step}/${this.maxSteps}: Getting page context...`);
 
       // 1. Get current page context from content script
       const contextResult = await this._getPageContext(tabId);
       if (!contextResult.success) {
+        await finishPlanExecuteSession(false, null, `Failed to get page context: ${contextResult.error}`);
         return { success: false, error: `Failed to get page context: ${contextResult.error}` };
       }
 
@@ -56,44 +67,55 @@ Previous actions: ${history.length ? JSON.stringify(history) : 'None'}
 
 What is the next action? Respond with JSON only.`;
 
+      await appendPlanExecuteLog(`Step ${step}: Asking LLM for next action...`);
       const response = await this.llmClient.processQueryForPlan(systemPrompt, userPrompt);
       if (response.error) {
+        await finishPlanExecuteSession(false, null, response.error);
         return { success: false, error: response.error };
       }
 
       const decision = this._parseDecision(response.text);
       if (!decision) {
+        await finishPlanExecuteSession(false, null, `Could not parse LLM decision: ${response.text}`);
         return { success: false, error: `Could not parse LLM decision: ${response.text}` };
       }
 
       if (decision.done) {
+        const summary = decision.summary || 'Goal completed';
+        await finishPlanExecuteSession(true, summary, null);
         return {
           success: true,
-          summary: decision.summary || 'Goal completed',
+          summary,
           steps: history.length
         };
       }
 
+      await appendPlanExecuteLog(`Step ${step}: Executing ${decision.action} on ${decision.elementId}...`);
       // 3. Execute the action via content script (with permission request for write actions)
       const execResult = await this._executeAction(tabId, decision, goal, context);
       if (!execResult.success) {
+        await appendPlanExecuteLog(`Step ${step}: Action failed - ${execResult.error}`);
         history.push({ action: decision, result: execResult });
         // Continue loop - LLM might adapt on next iteration
         if (step >= this.maxSteps) {
+          await finishPlanExecuteSession(false, null, execResult.error);
           return { success: false, error: execResult.error, steps: history.length };
         }
         continue;
       }
 
+      await appendPlanExecuteLog(`Step ${step}: Action succeeded`);
       history.push({ action: decision, result: execResult });
 
       // Small delay to let the page update
       await new Promise((r) => setTimeout(r, 500));
     }
 
+    const errMsg = `Max steps (${this.maxSteps}) reached without completing goal`;
+    await finishPlanExecuteSession(false, null, errMsg);
     return {
       success: false,
-      error: `Max steps (${this.maxSteps}) reached without completing goal`,
+      error: errMsg,
       steps: history.length
     };
   }

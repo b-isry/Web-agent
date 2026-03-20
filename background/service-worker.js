@@ -12,10 +12,13 @@ import { TaskOrchestrator } from './task-orchestrator.js';
 const toolController = new ToolController();
 const llmClient = new LLMClient(toolController);
 const planExecutor = new PlanExecutor(llmClient);
-const taskOrchestrator = new TaskOrchestrator(llmClient);
+const taskOrchestrator = new TaskOrchestrator(llmClient, toolController);
+
+// Open side panel when extension icon is clicked
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
 // Listen for extension installation
-chrome.runtime.onInstalled.addListener((details) => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('[Mozilla UWA] Extension installed:', details.reason);
   if (details.reason === 'install') {
     // Set default user preferences
@@ -26,6 +29,12 @@ chrome.runtime.onInstalled.addListener((details) => {
         language: 'en'
       }
     });
+  }
+  // Open side panel when extension icon is clicked (instead of popup)
+  try {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  } catch (err) {
+    console.warn('[Mozilla UWA] sidePanel.setPanelBehavior:', err);
   }
 });
 

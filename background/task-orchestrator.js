@@ -3,10 +3,17 @@
  */
 
 import { createTask, updateTask, addStepResult, clearTask, TaskStatus } from './task-state.js';
+import {
+  startGlobalTaskSession,
+  appendGlobalTaskLog,
+  updateGlobalTaskFromState,
+  finishGlobalTaskSession,
+} from './session-state.js';
 
 export class TaskOrchestrator {
-  constructor(llmClient) {
+  constructor(llmClient, toolController) {
     this.llmClient = llmClient;
+    this.toolController = toolController;
   }
 
   /**
@@ -14,25 +21,36 @@ export class TaskOrchestrator {
    */
   async run(goal, tabId) {
     const state = await createTask(goal, tabId);
+    await startGlobalTaskSession(goal, tabId);
+    await appendGlobalTaskLog('Starting global task...');
 
     try {
       // 1. Parse goal with LLM -> extract date intent
+      await appendGlobalTaskLog('Parsing goal...');
       const parsed = await this._parseGoal(goal);
       const date = parsed.date || new Date().toISOString().slice(0, 10);
 
       // 2. Extract price from current tab
+      await appendGlobalTaskLog('Extracting price from page...');
       const priceResult = await this._extractPriceFromTab(tabId);
       await addStepResult('extract_price', priceResult);
+      const taskState = await this._getState();
+      await updateGlobalTaskFromState(taskState);
 
-      // 3. Open hidden tab to budget mock, get balance
+      // 3. Check budget
+      await appendGlobalTaskLog('Checking budget...');
       const budgetResult = await this._checkBudget();
       await addStepResult('check_budget', budgetResult);
+      await updateGlobalTaskFromState(await this._getState());
 
-      // 4. Open hidden tab to calendar mock, get events
+      // 4. Check calendar
+      await appendGlobalTaskLog('Checking calendar...');
       const calendarResult = await this._checkCalendar(date);
       await addStepResult('check_calendar', calendarResult);
+      await updateGlobalTaskFromState(await this._getState());
 
       // 5. Aggregate and recommend
+      await appendGlobalTaskLog('Generating recommendation...');
       const recommendation = await this._aggregateAndRecommend(
         goal,
         priceResult,
@@ -46,6 +64,7 @@ export class TaskOrchestrator {
         recommendation,
         completedAt: Date.now(),
       });
+      await finishGlobalTaskSession(true, recommendation, null);
 
       return { success: true, recommendation, state: await this._getState() };
     } catch (err) {
@@ -54,6 +73,7 @@ export class TaskOrchestrator {
         error: err.message,
         completedAt: Date.now(),
       });
+      await finishGlobalTaskSession(false, null, err.message);
       return { success: false, error: err.message, state: await this._getState() };
     }
   }
@@ -137,54 +157,36 @@ If the user says "that day" or similar, use today's date.`,
   }
 
   async _checkBudget() {
-    const url = chrome.runtime.getURL('mock/budget.html');
-    const tab = await chrome.tabs.create({ url, active: false });
-    await waitForTabLoad(tab.id);
-
-    const result = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        const el = document.getElementById('budget-data');
-        if (!el) return null;
-        return {
-          balance: parseFloat(el.dataset.balance || '0'),
-          currency: el.dataset.currency || 'USD',
-          available: el.dataset.available === 'true',
-        };
-      },
-    });
-
-    await chrome.tabs.remove(tab.id);
-
-    const data = result?.[0]?.result;
-    return data
-      ? { success: true, ...data }
-      : { success: false, error: 'Could not read budget', balance: 0 };
+    const result = await this.toolController.callTool('check_budget', {});
+    const text = result?.content?.[0]?.text;
+    if (!text) return { success: false, error: 'Could not read budget', balance: 0 };
+    try {
+      const data = JSON.parse(text);
+      return {
+        success: data.success ?? true,
+        balance: data.balance ?? data.monthly_budget ?? 0,
+        currency: data.currency ?? 'USD',
+        available: data.available ?? (data.balance > 0),
+      };
+    } catch {
+      return { success: false, error: 'Could not parse budget', balance: 0 };
+    }
   }
 
   async _checkCalendar(date) {
-    const url = chrome.runtime.getURL(`mock/calendar.html?date=${date}`);
-    const tab = await chrome.tabs.create({ url, active: false });
-    await waitForTabLoad(tab.id);
-
-    const result = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        const events = Array.from(document.querySelectorAll('.event')).map((el) => ({
-          title: el.dataset.title || el.textContent,
-          start: el.dataset.start,
-          end: el.dataset.end,
-        }));
-        return { date: document.getElementById('display-date')?.textContent, events };
-      },
-    });
-
-    await chrome.tabs.remove(tab.id);
-
-    const data = result?.[0]?.result;
-    return data
-      ? { success: true, ...data }
-      : { success: false, error: 'Could not read calendar', events: [] };
+    const result = await this.toolController.callTool('check_calendar', { date });
+    const text = result?.content?.[0]?.text;
+    if (!text) return { success: false, error: 'Could not read calendar', events: [] };
+    try {
+      const data = JSON.parse(text);
+      return {
+        success: data.success ?? false,
+        date: data.date ?? date,
+        events: data.events ?? [],
+      };
+    } catch {
+      return { success: false, error: 'Could not parse calendar', events: [] };
+    }
   }
 
   async _aggregateAndRecommend(goal, priceResult, budgetResult, calendarResult, date) {
@@ -237,20 +239,3 @@ function fallbackRecommendation(price, balance, events) {
   return msg;
 }
 
-function waitForTabLoad(tabId) {
-  return new Promise((resolve) => {
-    const listener = (id, info) => {
-      if (id === tabId && info.status === 'complete') {
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
-    };
-    chrome.tabs.onUpdated.addListener(listener);
-    chrome.tabs.get(tabId).then((tab) => {
-      if (tab.status === 'complete') {
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
-    }).catch(() => resolve());
-  });
-}
